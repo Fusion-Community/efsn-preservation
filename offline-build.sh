@@ -18,5 +18,5 @@ if [ "$variant" = gateway ]; then
     go test ./cmd/utils -run '^TestExplicitEmptyBootstrapNodes$' -count=1
 fi
 go run build/ci.go install -git-commit "$revision" ./cmd/efsn
-sha256sum --check /tmp/source-dependencies.sha256
+sha256sum -c /tmp/source-dependencies.sha256
 cp build/bin/efsn /output/efsn
