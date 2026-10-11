@@ -3,6 +3,8 @@ set -eu
 revision="$1"
 variant="$2"
 test "$(go version)" = 'go version go1.21.3 linux/amd64'
+GOMODCACHE=$(go env GOMODCACHE)
+export GOMODCACHE
 mkdir /efsn
 cp -a /source/. /efsn/
 cd /efsn
