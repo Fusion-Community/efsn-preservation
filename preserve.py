@@ -17,8 +17,13 @@ REPOSITORIES = {
     "community": "https://github.com/Fusion-Community/efsn.git",
     "gateway": "https://github.com/algorexxx/fsn-efsn.git",
     "upstream-wiki": "https://github.com/FUSIONFoundation/efsn.wiki.git",
+    "dcrm-go-wiki": "https://github.com/FUSIONFoundation/dcrm-go.wiki.git",
 }
-RELEASE_REPOSITORY = "FUSIONFoundation/efsn"
+RELEASE_REPOSITORIES = {
+    "upstream": "FUSIONFoundation/efsn",
+    "myfusionwallet": "FUSIONFoundation/myfusionwallet",
+    "web3-fusion-extend": "FUSIONFoundation/web3-fusion-extend",
+}
 RELEASE_FILE_LIMIT = 2 * 1024**3
 
 
@@ -28,16 +33,18 @@ def collect_snapshot(destination, captured_at):
     for name, url in REPOSITORIES.items():
         print(f"Preserving {name}", flush=True)
         repositories.append(preserve_repository(name, url, destination))
-    releases = preserve_releases(destination)
+    releases = [
+        preserve_releases(destination, name, repository)
+        for name, repository in RELEASE_REPOSITORIES.items()
+    ]
     write_json(destination / "manifest.json", {
         "captured_at": captured_at,
         "workflow_commit": os.environ.get("GITHUB_SHA"),
         "repositories": repositories,
-        "release_repository": RELEASE_REPOSITORY,
-        "releases": "upstream-releases.json",
-        "release_assets": releases,
+        "releases": releases,
     })
-    write_snapshot_notes(destination, captured_at, len(releases))
+    asset_count = sum(len(source["assets"]) for source in releases)
+    write_snapshot_notes(destination, captured_at, len(repositories), asset_count)
     write_checksums(destination)
 
 
@@ -70,22 +77,23 @@ def run_git(*arguments, cwd=None):
     ).stdout
 
 
-def preserve_releases(destination):
-    releases = read_pages(f"/repos/{RELEASE_REPOSITORY}/releases")
+def preserve_releases(destination, name, repository):
+    releases = read_pages(f"/repos/{repository}/releases")
     assets = []
     for release in releases:
         release_id = require_positive_id(release["id"])
         release["assets"] = read_pages(
-            f"/repos/{RELEASE_REPOSITORY}/releases/{release_id}/assets"
+            f"/repos/{repository}/releases/{release_id}/assets"
         )
         for asset in release["assets"]:
             asset_id = require_positive_id(asset["id"])
-            filename = f"release-{release_id}-asset-{asset_id}.bin"
-            print(f"Preserving upstream release asset {asset_id}", flush=True)
-            download_asset(asset, destination / filename)
+            filename = f"{name}-release-{release_id}-asset-{asset_id}.bin"
+            print(f"Preserving {repository} release asset {asset_id}", flush=True)
+            download_asset(asset, destination / filename, repository)
             assets.append({"release_id": release_id, "asset_id": asset_id, "file": filename})
-    write_json(destination / "upstream-releases.json", releases)
-    return assets
+    metadata = f"{name}-releases.json"
+    write_json(destination / metadata, releases)
+    return {"repository": repository, "metadata": metadata, "assets": assets}
 
 
 def require_positive_id(value):
@@ -124,10 +132,10 @@ def read_github_json(endpoint):
         return json.load(response)
 
 
-def download_asset(asset, destination):
+def download_asset(asset, destination, repository):
     url = asset["browser_download_url"]
     parsed = urllib.parse.urlsplit(url)
-    prefix = f"/{RELEASE_REPOSITORY}/releases/download/".lower()
+    prefix = f"/{repository}/releases/download/".lower()
     if (parsed.scheme != "https" or parsed.netloc != "github.com"
             or not parsed.path.lower().startswith(prefix)):
         raise ValueError("Release asset is outside the expected public GitHub repository")
@@ -159,22 +167,23 @@ def write_json(path, value):
     path.write_text(json.dumps(value, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
-def write_snapshot_notes(destination, captured_at, asset_count):
+def write_snapshot_notes(destination, captured_at, repository_count, asset_count):
     (destination / "SNAPSHOT.md").write_text(
         f"# Preservation snapshot\n\nCaptured at {captured_at}.\n\n"
-        f"Four Git bundles and {asset_count} upstream release downloads. "
+        f"{repository_count} Git bundles and {asset_count} upstream release downloads. "
         "Each bundle was restored without contacting GitHub, checked with git fsck, "
         "and compared with the source ref inventory. SHA256SUMS covers every saved file.\n\n"
-        "manifest.json maps bundles and asset IDs; upstream-releases.json keeps original "
-        "filenames, release notes, URLs and any upstream hashes. Restore an asset's original "
+        "manifest.json maps bundles, release repositories, metadata files and asset IDs. "
+        "Each *-releases.json keeps original filenames, release notes, URLs and any "
+        "upstream hashes. Restore an asset's original "
         "filename using that mapping. Locally computed hashes prove copy integrity, not "
         "the authenticity or safety of the original binaries.\n\n"
         "This is a preservation copy, not a new efsn software release. Licenses and notices "
         "remain those of the original projects.\n\n"
         "Not included: issues and pull-request discussions, Git LFS objects, separate "
         "submodule repositories, Go dependency sources, container images, VM configuration, "
-        "secrets or chain databases. Dependencies and the deployed image are separate "
-        "preservation steps; this snapshot alone does not establish an offline rebuild.\n",
+        "secrets or chain databases. This snapshot preserves upstream material; "
+        "it does not establish an offline rebuild.\n",
         encoding="utf-8",
     )
 

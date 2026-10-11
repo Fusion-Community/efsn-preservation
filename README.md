@@ -1,6 +1,6 @@
 # efsn-preservation
 
-Preservation copies of public Fusion source history, the upstream wiki, and upstream
+Preservation copies of public Fusion source history, upstream wikis, and upstream
 release downloads. The maintained client remains in `Fusion-Community/efsn`.
 
 ## Run a snapshot
@@ -15,6 +15,14 @@ Each run saves the advertised Git refs and reachable history of:
 - `Fusion-Community/efsn`
 - `algorexxx/fsn-efsn`, which holds the deployed gateway integration
 - `FUSIONFoundation/efsn.wiki.git`
+- `FUSIONFoundation/dcrm-go.wiki.git`
+
+Release notes, metadata and attached assets are saved for `FUSIONFoundation/efsn`,
+`FUSIONFoundation/myfusionwallet` and `FUSIONFoundation/web3-fusion-extend`.
+The `FRC758`, `FRC759`, `fsn-stats`, `dcrm-go` and `Documentation` community forks
+retain their upstream branches and tags. Apart from the dcrm-go wiki listed above,
+they had no public releases or wikis when checked on 2026-10-11. The PDFs in
+`Fusion-Community/Documentation` are stored directly in Git.
 
 Every bundle is cloned back locally, checked with `git fsck`, and compared with the
 source refs. All upstream release pages and asset lists are paginated; each download
@@ -41,19 +49,20 @@ git -C efsn-restored fsck --full
 To restore every ref into a bare repository, use
 `git clone --mirror upstream.bundle efsn-restored.git`. `manifest.json` records the
 source HEAD ref and complete ref inventory. Other bundles restore in the same way.
-For original release downloads, match the saved asset ID in `manifest.json` to
-`upstream-releases.json` and restore its original filename.
+For original release downloads, use each repository's metadata filename and asset
+ID in `manifest.json` to find the original filename in its `*-releases.json` file.
 
 Computed checksums verify faithful copies; they are not new upstream signatures or
 an endorsement of the old binaries. Original licenses and notices remain applicable.
 
 ## Coverage
 
-This first workflow covers Git history, the wiki and public upstream releases. It does
+This workflow covers the listed Git history, wikis and public upstream releases. It does
 not archive issue/PR discussions, LFS objects, separate submodule repositories, Go
-dependency sources or container images. Build dependencies and the exact deployed VM
-image require the next preservation steps and an offline rebuild check. VM settings,
-keys and chain databases do not belong in this public repository.
+dependency sources or container images. The separate build-input snapshot below
+already covers the selected efsn revisions. Exporting the deployed VM image is outside
+the preservation scope. VM settings, keys and chain databases do not belong in this
+public repository.
 
 ## Check changes
 
@@ -95,6 +104,6 @@ Restore imports the saved Docker images and uses temporary containers with no
 network and no node service. It retains the images for later use and writes a
 verification report. Installed Alpine packages are inventoried at collection time;
 they are not asserted to match the VM's original C toolchain bit for bit. This
-checks offline rebuildability, not full-history consensus correctness. The exact
-running VM image requires a separate export. Other architectures, older dependency
-graphs, external test repositories, VM settings, secrets and chain data are excluded.
+checks offline rebuildability, not full-history consensus correctness. Other
+architectures, older dependency graphs, external test repositories, VM settings,
+secrets and chain data are excluded.
