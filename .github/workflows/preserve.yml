@@ -1,0 +1,44 @@
+name: Preserve upstream
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: preserve-upstream
+  cancel-in-progress: false
+
+jobs:
+  preserve:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GIT_TERMINAL_PROMPT: '0'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Check collector
+        run: python3 -m unittest discover -v
+      - name: Collect and restore-check public sources
+        run: python3 preserve.py "$RUNNER_TEMP/efsn-snapshot"
+      - name: Publish only after downloading and verifying the uploaded copy
+        shell: bash
+        run: |
+          set -euo pipefail
+          snapshot="$RUNNER_TEMP/efsn-snapshot"
+          verification="$RUNNER_TEMP/efsn-downloaded"
+          tag="snapshot-$(date -u +%Y%m%dT%H%M%SZ)-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --draft --title "Preservation $tag" --notes-file "$snapshot/SNAPSHOT.md"
+          printf 'Draft snapshot: https://github.com/%s/releases/tag/%s\n' "$GITHUB_REPOSITORY" "$tag" >> "$GITHUB_STEP_SUMMARY"
+          gh release upload "$tag" "$snapshot"/* --repo "$GITHUB_REPOSITORY"
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "$verification"
+          cmp -- "$snapshot/SHA256SUMS" "$verification/SHA256SUMS"
+          (cd "$verification" && sha256sum --check SHA256SUMS)
+          gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false --latest=false
+          printf '\nPublished after restore and upload verification. See SNAPSHOT.md for coverage and exclusions.\n' >> "$GITHUB_STEP_SUMMARY"
