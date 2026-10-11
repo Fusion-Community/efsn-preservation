@@ -17,3 +17,7 @@ jobs:
         with:
           persist-credentials: false
       - run: python3 -m unittest discover -v
+
+  build-inputs:
+    needs: check
+    uses: ./.github/workflows/build-inputs.yml

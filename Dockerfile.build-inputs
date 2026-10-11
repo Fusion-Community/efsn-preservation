@@ -1,0 +1,11 @@
+ARG BUILDER_IMAGE
+FROM ${BUILDER_IMAGE}
+RUN apk add --no-cache make gcc musl-dev linux-headers
+ENV GOTOOLCHAIN=local
+WORKDIR /dependencies
+COPY go.mod go.sum ./
+RUN test "$(go version)" = 'go version go1.21.3 linux/amd64' \
+    && go mod download -json all > downloads.json \
+    && go list -m -json all > modules.json \
+    && go mod verify \
+    && apk info -v > apk-packages.txt
