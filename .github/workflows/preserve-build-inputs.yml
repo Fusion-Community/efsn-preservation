@@ -1,0 +1,64 @@
+name: Preserve build inputs
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/build-inputs.yml
+
+  publish:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: build-inputs
+          path: ${{ runner.temp }}/build-inputs
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: build-verification
+          path: ${{ runner.temp }}/build-verification
+      - name: Include restore evidence and check the release inventory
+        run: |
+          python3 - <<'PY'
+          import os
+          import shutil
+          from pathlib import Path
+          from build_inputs import verify_checksums
+          from preserve import write_checksums
+          root = Path(os.environ["RUNNER_TEMP"])
+          snapshot = root / "build-inputs"
+          verify_checksums(snapshot)
+          shutil.copyfile(root / "build-verification/verification.json", snapshot / "verification.json")
+          (snapshot / "SHA256SUMS").unlink()
+          write_checksums(snapshot)
+          PY
+      - name: Publish only after downloading and verifying the uploaded copy
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          snapshot="$RUNNER_TEMP/build-inputs"
+          verification="$RUNNER_TEMP/build-downloaded"
+          tag="build-inputs-$(date -u +%Y%m%dT%H%M%SZ)-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --draft --title "Build preservation $tag" --notes-file "$snapshot/SNAPSHOT.md"
+          printf 'Snapshot: https://github.com/%s/releases/tag/%s\n' "$GITHUB_REPOSITORY" "$tag" >> "$GITHUB_STEP_SUMMARY"
+          gh release upload "$tag" "$snapshot"/* --repo "$GITHUB_REPOSITORY"
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "$verification"
+          cmp -- "$snapshot/SHA256SUMS" "$verification/SHA256SUMS"
+          (cd "$verification" && sha256sum --check SHA256SUMS)
+          gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false --latest=false

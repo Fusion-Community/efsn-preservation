@@ -60,3 +60,41 @@ keys and chain databases do not belong in this public repository.
 Python 3.11+ and Git are sufficient: `python3 -m unittest discover -v`.
 Tests use temporary Git repositories and in-memory downloads; they do not publish
 releases or contact the gateway.
+
+## Preserve build inputs
+
+After merging the build workflow, open **Actions → Preserve build inputs → Run
+workflow** on **main**. This saves Linux/amd64 Docker archives in a separate dated
+release. No container registry or personal token is needed.
+
+The pinned Go 1.21.3 and Alpine base images, installed C build tools, complete Go
+module cache (including source, ZIPs and licenses), dependency inventories, and
+the preserved source bundles are included. The upstream baseline `c5f0174`,
+community tracing fix `aae15bf`, and deployed gateway source `ac94b406` share the
+same dependency files; the collector checks that they still match. The source
+bundles come from the first community snapshot with fixed SHA-256 values.
+
+A separate fresh runner loads only these archives and builds all three revisions
+with container networking disabled, module downloads disabled, and empty Go build
+caches. Both tracing fixes run their race regression tests; the gateway also runs
+its bootstrap isolation test. Each resulting binary must report its expected
+commit and Go version when executed with the saved Alpine runtime. PR checks run
+this entire exercise without publishing. Only a manual main-branch run can publish,
+after the uploaded copy passes checksum verification. Intermediate Actions artifacts
+expire after one day; published release assets are the preservation copy.
+
+For an offline Linux/amd64 Docker host with Python 3.11+ and Git, download all release
+assets into an empty directory, then run:
+
+```bash
+sha256sum --check SHA256SUMS
+python3 build_inputs.py verify . ../verification.json
+```
+
+Restore imports the saved Docker images and uses temporary containers with no
+network and no node service. It retains the images for later use and writes a
+verification report. Installed Alpine packages are inventoried at collection time;
+they are not asserted to match the VM's original C toolchain bit for bit. This
+checks offline rebuildability, not full-history consensus correctness. The exact
+running VM image requires a separate export. Other architectures, older dependency
+graphs, external test repositories, VM settings, secrets and chain data are excluded.
